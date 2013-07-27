@@ -46,6 +46,10 @@ module BM3
         @messaging.send topic, msg
       end
 
+      def process topic, msg
+        raise NotImplementedError, "Message hook failed to overload #process ( required method )"
+      end
+
     end
 
     ##
@@ -88,12 +92,10 @@ module BM3
       debug_info "Connected."
       # Subscribe to the unicast topic, always
       add_subscription id, @recv_hook
-      debug_info "Subscribed to unicast on #{id}"
       # Subscribe to any extra topics, each with their own handler class
       topics.each {|topic, hook_klass|
         hook_instance = hook_klass.new self, opts['message_hook_granularity']
         add_subscription topic, hook_instance
-        debug_info "Subscribed to #{topic} with #{hook_klass}"
       }
     end
 

@@ -18,7 +18,6 @@ Gem::Specification.new do |spec|
   spec.add_dependency('hot_bunnies')
   spec.add_dependency('rb-inotify')
 
-
   spec.add_development_dependency('test-unit')
 
   spec.description = <<-EOF

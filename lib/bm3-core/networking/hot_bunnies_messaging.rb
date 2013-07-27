@@ -17,7 +17,7 @@ module BM3
       def heartbeat delay, &blk
         raise ArgumentError, "#{__meth__}: No heartbeat block given." unless block_given?
         @heartbeat_thread = Thread.new do
-          debug_info "Starting heartbeat thread."
+          debug_info "Starting heartbeat thread, #{delay} second loop."
           loop do
             topic, msg = yield
             send topic, msg
@@ -87,7 +87,7 @@ module BM3
             headers.ack
             hook_instance.process topic, (MessagePack.unpack( msg ) rescue msg)
           }
-          debug_info "Subscribed to #{topic_queue}"
+          debug_info "Subscribed to #{topic} with #{hook_instance.class}"
         end
 
     end

@@ -16,7 +16,7 @@ opts={
 
 include BM3
 
-class RecvHook < Messaging::Hook
+class ExampleRecvHook < Messaging::Hook
 
   include BM3::Logger
 
@@ -32,7 +32,7 @@ class RecvHook < Messaging::Hook
 end
 
 # mandatory hook class for unicast, optional classes for topics
-b = Messaging.new opts, RecvHook, "broadcast" => RecvHook
+b = Messaging.new opts, ExampleRecvHook, "broadcast" => ExampleRecvHook
 
 10.times do
   b.send b.id, "Hey anyone there?"
