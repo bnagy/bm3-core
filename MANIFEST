@@ -1,22 +1,40 @@
 * CHANGES
+* MANIFEST
+* Rakefile
+* README
+
 * examples/messaging_test.rb
-* lib/bm3-core
+
+* test/test_bm3_core.rb
+
+* bin/monitor_server
+
 * lib/bm3-core/bm3_logger.rb
-* lib/bm3-core/bug
-* lib/bm3-core/bug/detail_parser.rb
-* lib/bm3-core/bug.rb
 * lib/bm3-core/dirwatcher.rb
-* lib/bm3-core/networking
+* lib/bm3-core/ttf.rb
+
+* lib/bm3-core/bug.rb
+* lib/bm3-core/bug/detail_parser.rb
+
+* lib/bm3-core/networking.rb
 * lib/bm3-core/networking/base_node.rb
 * lib/bm3-core/networking/bm3map.rb
 * lib/bm3-core/networking/hot_bunnies_messaging.rb
 * lib/bm3-core/networking/messaging.rb
 * lib/bm3-core/networking/nodes.rb
-* lib/bm3-core/networking/uuid.rb
-* lib/bm3-core/networking/winerror.rb
-* lib/bm3-core/networking.rb
+
+* lib/bm3-core/win32.rb
+* lib/bm3-core/win32/beanstalk_base.rb
+* lib/bm3-core/win32/cpu_monitor.rb
+* lib/bm3-core/win32/dialog_killer.rb
+* lib/bm3-core/win32/kernel/gdi.rb
+* lib/bm3-core/win32/kernel/gdi_font.rb
+* lib/bm3-core/win32/kernel/gdi_printer.rb
+* lib/bm3-core/win32/kernel/gdi_window.rb
+* lib/bm3-core/win32/process_killer.rb
+* lib/bm3-core/win32/toolhelp.rb
+* lib/bm3-core/win32/uuid.rb
+* lib/bm3-core/win32/winerror.rb
+* lib/bm3-core/win32/wintypes.rb
+
 * lib/bm3-core.rb
-* MANIFEST
-* Rakefile
-* README
-* test/test_bm3_core.rb

@@ -1,2 +1,4 @@
 = 0.0.1
 * Initial refactor of bm3-core into a gem
+= 0.0.2
+* Move the core win32 stuff in here as well

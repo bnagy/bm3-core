@@ -12,7 +12,7 @@
 
 require 'msgpack'
 require 'bm3-core/bm3_logger'
-require_relative 'uuid' if RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
+require 'bm3-core/win32/uuid' if RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
 require_relative 'hot_bunnies_messaging'
 
 module BM3
@@ -111,7 +111,7 @@ module BM3
 
       def create_uuid
         if RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
-          UUID.create
+          Win32::UUID.create
         else
           # OSX and linux should have uuidgen...
           `uuidgen`.chomp.upcase

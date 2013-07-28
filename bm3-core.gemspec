@@ -1,15 +1,17 @@
 require 'rubygems'
 
 Gem::Specification.new do |spec|
-  spec.name       = 'bm3-core'
-  spec.version    = '0.0.1'
-  spec.author     = 'Ben Nagy'
-  spec.license    = 'MIT'
-  spec.email      = 'ben@iagu.net'
+  spec.name        = 'bm3-core'
+  spec.version     = '0.0.2'
+  spec.author      = 'Ben Nagy'
+  spec.license     = 'MIT'
+  spec.email       = 'ben@iagu.net'
   #spec.homepage   = '<INTERNAL ONLY>'
-  spec.summary    = 'Core components shared by BM3 projects'
-  spec.test_files = Dir['test/*.rb']
-  spec.files      = Dir['**/*'].delete_if{ |item| item.include?('git') }
+  spec.summary     = 'Core components shared by BM3 projects'
+  spec.test_files  = Dir['test/*.rb']
+  spec.files       = Dir['**/*'].delete_if{ |item| item.include?('git') }
+
+  spec.executables = 'monitor_server'
 
   spec.extra_rdoc_files = ['CHANGES', 'README', 'MANIFEST']
 
@@ -17,6 +19,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency('msgpack-jruby')
   spec.add_dependency('hot_bunnies')
   spec.add_dependency('rb-inotify')
+  spec.add_dependency('bindata')
 
   spec.add_development_dependency('test-unit')
 
