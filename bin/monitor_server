@@ -1,0 +1,299 @@
+# Process to monitor a target under instrumentation. This process handles
+# monitoring the target CPU, running the debugger (which it connects to over
+# DRb) and killing off dialog boxes.
+#
+# Author: Ben Nagy
+# Copyright: Copyright (c) Ben Nagy, 2006-2013.
+# License: The MIT License
+# (See http://www.opensource.org/licenses/mit-license.php for details.)
+
+require 'rubygems'
+require 'bm3-core'
+require 'bm3-core/win32'
+require 'drb'
+require 'fileutils'
+require 'trollop'
+
+OPTS=Trollop::options do
+  opt :port, "Port to listen on, default 8888", :type=>:integer, :default=>8888
+  opt :debug, "Debug mode", :type=>:boolean
+end
+
+class Monitor
+
+  MONITOR_DEFAULTS = {
+    'timeout'      => 15,          # Hard timeout before kill
+    'kill_dialogs' => true,
+    'kill_on_idle' => true
+  }
+  CPUMON_THRESH       = 0.00   # % CPU to get under to be called 'idle'
+  CPUMON_TICKS        = 15     # How many measures at CPUMON_THRESH before kill
+  WORKING_MIN         = 15     # CPU % to get over to be called 'working'
+  MONITOR_GRANULARITY = 0.05   # Granularity for wait_for_event and the dialog killer (in s)
+  RETRY_COUNT         = 5      # Used by most stuff that retries
+  SLEEPTIME           = 3      # For the stale file sweeper
+
+  include BM3::Logger
+  include BM3::Win32
+
+  attr_accessor :debug
+
+  def initialize
+    debug_info "Starting sweeper thread"
+    start_sweeper_thread
+    debug_info "Connecting to debugger..."
+    begin
+      @debugger=DRbObject.new(nil, "druby://127.0.0.1:8889")
+    rescue
+      raise "#{self}: Couldn't connect to debugger"
+    end
+    @state=:idle
+    @debug=OPTS[:debug]
+    @dialog_killer=DialogKiller.new MONITOR_GRANULARITY*4, OPTS[:debug]
+    debug_info "Ready to roll."
+  end
+
+  def start( app_pid, arg_hsh={} )
+    debug_info "Starting to monitor pid #{app_pid}"
+    raise "#{self}: Debugee PID mismatch" unless @debugger.current_process==app_pid
+    @monitor_args=MONITOR_DEFAULTS.merge( arg_hsh )
+    @state=:running
+
+    start_monitor_thread( app_pid )
+  end
+
+  def running?
+    @state == :running
+  end
+
+  def error?
+    @state == :error
+  end
+
+  def hang?
+    @state == :hang
+  end
+
+  def fatal_event?
+    @fatal_event
+  end
+
+  def state
+    @state.to_s
+  end
+
+  def event_data
+    @event_data
+  end
+
+  def minidump
+    @minidump
+  end
+
+  def reset
+    # Only called externally - trying to kill a thread from inside itself
+    # doesn't seem to work properly
+    debug_info "Reset called."
+    @cpumon.close if @cpumon
+    @event_data             = nil
+    @instrumentation_module = nil
+    @state                  = :idle
+  rescue
+    debug_info "#{__method__} #{$!}"
+    raise $!
+  end
+
+  def new_debugger
+    debug_info "Reconnecting to debugger"
+    begin
+      @debugger = DRbObject.new nil, "druby://127.0.0.1:8889"
+    rescue
+      raise "#{self}: Couldn't connect to debugger"
+    end
+  end
+
+  def new_test filename
+    debug_info "Prepping for new test #{filename}"
+    raise "#{self}: Unable to continue, no debugger" unless @debugger
+    raise "#{self}: Uncleared fatal_event data!!" if @event_data
+    @delivery_start_time = Time.now
+  rescue
+    debug_info "#{__method__} #{$!}"
+    raise $!
+  end
+
+  def clear_fatal
+    @event_data  = nil
+    @fatal_event = false
+  end
+
+  def destroy
+    debug_info "Destroying."
+    Process.exit!
+  end
+
+  private
+
+  def start_sweeper_thread
+    # With JRuby it seems that threads might not die if they're in the middle of
+    # something, so we're going to keep them in an array and just kill them
+    # until they finally die. This is to address a memory leak seen in JRuby
+    # with Windows7 x64.
+    @sweepers ||= []
+    @sweepers.map( &:kill )
+    @sweepers.select!( &:alive? )
+    @patterns ||= ['R:/Temp/**/*.*', 'R:/Temp/Temporary Internet Files/**/*.*', 'R:/**/~$*.*']
+    @sweeper = Thread.new do
+      loop do
+        @patterns.each {|pattern|
+          Dir.glob(pattern, File::FNM_DOTMATCH).each {|fn|
+            next if File.directory?(fn)
+            begin
+              FileUtils.rm(fn)
+            rescue
+              next # probably still open
+            end
+          }
+        }
+        sleep SLEEPTIME
+      end
+    end
+    @sweepers << @sweeper
+  end
+
+  def start_monitor_thread pid
+    raise RuntimeError, "#{self}: Debugger not initialized yet!" unless @debugger
+    @monitors ||= []
+    # Kill off any old monitor threads
+    @monitors.map( &:terminate )
+    @monitors.select!( &:alive? )
+    # This is an ivar because the abort_if_* methods use it
+    @cpumon = CPUMonitor.new pid
+    @monitors << Thread.new do
+      already = false
+      debug_info "Monitor thread started for #{pid}"
+      loop do
+        begin
+          # wait_for_event blocks for roughly the monitor granularity, so each
+          # time it returns is a 'tick', at which point we update the CPU
+          # monitor average and kill dialogs
+          is_event = @debugger.wait_for_event MONITOR_GRANULARITY*1000 # in msec
+          @dialog_killer.kill_dialogs( pid ) if @monitor_args['kill_dialogs']
+          @cpumon.update_rolling_avg
+          unless is_event
+            abort_if_hard_timeout
+            if @cpumon.any_above? WORKING_MIN
+              debug_info "Process has started working, legit to kill" unless already
+              already = true
+              abort_if_idle if @monitor_args['kill_on_idle']
+            end
+            @debugger.go
+          else
+            @instrumentation_module = eval(@monitor_args['instrumentation_module'])
+            unless [:fatal_event?, :on_fatal].all? {|meth| @instrumentation_module.respond_to? meth}
+              raise(
+                ArgumentError,
+                "#{self}: instrumentation module doesn't implement all required methods."
+              )
+            end
+            if @instrumentation_module.fatal_event? @debugger
+              debug_info "FATAL event."
+              handle_fatal_event
+            else
+              debug_info "NONFATAL event, continuing."
+              abort_if_hard_timeout
+              @debugger.go
+            end
+          end
+        rescue
+          if "#{$!}" =~ /E_UNEXPECTED/
+            # target exited prematurely? This happens for /GS violations etc...
+            debug_info "UNEXPECTED event."
+            handle_fatal_event
+          else
+            @state = :error
+            debug_info "#{__method__} #{$!} Setting state to error"
+            $@.first( 5 ).each {|frame| debug_info frame }
+            Thread.stop
+          end
+        end
+      end
+    end
+  rescue
+    debug_info "#{__method__} #{$!}"
+    @state = :error
+    raise $!
+  end
+
+  def abort_if_idle
+    # Only called from within the monitor thread, so the Thread.exit
+    # exits @monitor_thread not the whole app
+    #
+    # CPUMON_TICKS is also the minimum number of events for rolling_avg -
+    # it returns nil otherwise
+    return unless @delivery_start_time
+    if (avg=@cpumon.rolling_avg( CPUMON_TICKS )) && avg <= CPUMON_THRESH
+      debug_info "CPU monitor says 'no'. (average #{avg} at #{CPUMON_TICKS} measures)"
+      if @instrumentation_module && @instrumentation_module.respond_to?( :on_abort )
+        @event_data, @custom_state = @instrumentation_module.on_abort @debugger
+      end
+      if @dialog_killer.dialogs_killed?
+        @state = @custom_state || :fail
+      else
+        @state = @custom_state || :success
+      end
+      Thread.stop
+    end
+  rescue
+    debug_info "#{__method__} #{$!}"
+    raise $!
+  end
+
+  def abort_if_hard_timeout
+    # Only called from within the monitor thread, so the Thread.exit
+    # exits @monitor_thread not the whole app
+    return unless @delivery_start_time # test delivery hasn't started yet
+    if Time.now - @delivery_start_time > @monitor_args['timeout']
+      debug_info "CPU: #{@cpumon.rolling_avg( CPUMON_TICKS )}"
+      debug_info "Hard Timeout (#{Time.now - @delivery_start_time}) Exceeded."
+      if @instrumentation_module && @instrumentation_module.respond_to?( :on_abort )
+        @event_data, @custom_state = @instrumentation_module.on_abort @debugger
+      end
+      @state = @custom_state || :hang
+      Thread.stop
+    end
+  rescue
+    debug_info "#{__method__} #{$!}"
+    $@.first( 5 ).each {|frame| debug_info frame }
+    raise $!
+  end
+
+  def handle_fatal_event
+    # Only called from within the monitor thread, so the Thread.exit
+    # exits @monitor_thread not the whole app
+    get_minidump if @monitor_args['minidump']
+    @event_data, @custom_state=@instrumentation_module.on_fatal( @debugger )
+    # Don't override custom states from the instrumentation module
+    @state = @custom_state || :exception
+    @fatal_event = true
+    Thread.stop
+  rescue
+    debug_info "#{__method__} #{$!}"
+    $@.first( 5 ).each {|frame| debug_info frame }
+    raise $!
+  end
+
+  def get_minidump
+    debug_info "Collecting minidump..."
+    @debugger.execute ".dump /mFhutwd r:\\fuzzclient\\mini.dmp"
+    unless File.exists? "R:/fuzzclient/mini.dmp"
+      raise RuntimeError, "#{self}:#{__method__}: Tried to dump, but couldn't find it!"
+    end
+    @minidump = File.binread "R:/fuzzclient/mini.dmp"
+    FileUtils.rm_f "R:/fuzzclient/mini.dmp"
+  end
+
+end
+
+DRb.start_service( "druby://127.0.0.1:#{OPTS[:port]}", Monitor.new )
+DRb.thread.join
