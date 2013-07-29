@@ -20,8 +20,8 @@ module BM3
           end
         end
         debug_info "Removing any old copies of #{font_file}"
-        GDI.RemoveFontResourceEx(font_file, 0, nil) # just in case
-        added=GDI.AddFontResourceEx(font_file, 0, nil)
+        GDI.RemoveFontResourceEx(font_file, 0, 0) # just in case
+        added=GDI.AddFontResourceEx(font_file, 0, 0)
         if added.zero?
           debug_info "Failed to load #{font_file}."
           raise ArgumentError, "#{self.class}-#{__method__}: Failed to load font."
@@ -75,7 +75,7 @@ module BM3
         return unless @old_font
         # SelectObject returns the new font (being swapped out), which we delete
         raise_win32_error unless GDI.DeleteObject(GDI.SelectObject(self.dc, @old_font))
-        raise_win32_error if GDI.RemoveFontResourceEx(@last_font, 0, nil).zero?
+        raise_win32_error if GDI.RemoveFontResourceEx(@last_font, 0, 0).zero?
         debug_info "Removed #{@last_font}, restored handle #{@old_font}"
         true
       end

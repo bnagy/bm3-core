@@ -69,6 +69,7 @@ module BM3
       raise "Can't find table #{tag}" unless target_table
       adjustment          = data.bytesize - target_table[:data].bytesize
       target_table[:data] = data
+      headers             = tables.values.map {|t| t[:header]}
       # Apply the adjustment to all tables with a start offset after that of the
       # one we just modified ( the table data is not packed in the same order as
       # the headers)
@@ -83,7 +84,6 @@ module BM3
       # whereas @table_data starts from the end of the headers, so we need to
       # adjust for that with a fudge factor
       fudge = header.num_bytes + headers.map(&:num_bytes).inject(:+)
-      debug_info "Adjusting offsets of #{to_fix.size} tables by #{fudge}"
       table_data[target_header.table_offset - fudge, target_header.len] = data
       # set the new length
       target_header.len = data.bytesize
