@@ -42,9 +42,12 @@ module BM3
     include BM3::Logger
 
     attr_reader :header, :tables, :table_data
+    attr_accessor :debug
 
     def initialize data, opts={debug: false}
-      input   = StringIO.new data
+      @debug  = opts[:debug]
+      input   = StringIO.new data.clone
+      @raw_data = data
       headers = []
       @header = TTFHeader.read input
       if header.scaler_type == 65536 # magic
@@ -53,11 +56,9 @@ module BM3
         debug_info "Invalid TTF, trying anyway..."
       end
       @tables = {}
-      @debug  = opts[:debug]
       @header.num_tables.times do
         headers << TTFTableHeader.read( input )
       end
-      @raw_data = data
       @table_data = input.read
       build_tables headers
     end
@@ -66,10 +67,12 @@ module BM3
       debug_info "updating #{tag} table..."
       target_table        = tables[tag]
       target_header       = target_table[:header]
+      debug_info "New data #{data.bytesize}, existing data #{target_table[:data].bytesize}, should be #{target_header.len}"
+
       raise "Can't find table #{tag}" unless target_table
       adjustment          = data.bytesize - target_table[:data].bytesize
+      # Make the update in our OO version of the TTF
       target_table[:data] = data
-      headers             = tables.values.map {|t| t[:header]}
       # Apply the adjustment to all tables with a start offset after that of the
       # one we just modified ( the table data is not packed in the same order as
       # the headers)
@@ -80,12 +83,9 @@ module BM3
       to_fix.each {|table|
         table[:header].table_offset += adjustment
       }
-      # Update the packed table data. All offsets are from 0 in the raw file,
-      # whereas @table_data starts from the end of the headers, so we need to
-      # adjust for that with a fudge factor
-      fudge = header.num_bytes + headers.map(&:num_bytes).inject(:+)
-      table_data[target_header.table_offset - fudge, target_header.len] = data
-      # set the new length
+      # Make the adjustment in the packed table data
+      table_data[target_header.table_offset, target_header.len] = data
+      debug_info "Offset #{target_header.table_offset}, really #{table_data.index(data)}"
       target_header.len = data.bytesize
       fix_checksums! if opts[:fix_checksums]
     end
@@ -148,7 +148,7 @@ module BM3
             check = table_contents.unpack('N*').inject(:+) % 2**32
             if check == th.checksum || tag == 'head'
               # The checksum for the head table is special, and can't be fixed here
-              debug_info "#{tag} - checksum OK (#{check.to_s(16)})"
+              # debug_info "#{tag} - checksum OK (#{check.to_s(16)})"
             else
               debug_info(
                 "#{tag} - checksum error (#{"%x" % th.checksum}) " <<

@@ -21,6 +21,7 @@ module BM3
   class BaseNode
     # Base class for all nodes
     SNOOZE_TIME = 5
+    MAX_BACKOFF = 5
 
     include BM3::Logger
 
@@ -47,6 +48,7 @@ module BM3
     end
 
     def pull &blk
+
       begin
         # Stay in this block until we get a usable message
         debug_info "Waiting for a job..."
@@ -54,26 +56,19 @@ module BM3
         debug_info "Got a job!"
         pdu = MessagePack.unpack job.body
         raise BadChecksum, "Bad Checksum!" unless checksum_ok? pdu
-      rescue Beanstalk::NotConnected
+      rescue Beanstalk::UnexpectedResponse, IOError
         debug_info "Beanstalk Error - #{$!}, reconnecting."
         beanstalk_connect
         set_watch @in_tube, reconnect: true
         sleep SNOOZE_TIME and retry
-      rescue Beanstalk::DeadlineSoonError
-        debug_info "Interrupted by DEADLIE_SOON, retrying"
-        retry
       rescue
         # Checksum errors and MessagePack errors are unrecoverable
-        if $! =~ /existing connection forcibly closed/
-          beanstalk_connect
-          set_watch @in_tube, reconnect: true
-          sleep SNOOZE_TIME and retry
-        else
-          debug_info "Unrecoverable problem with message contents - #{$!}, skipping"
-          job.delete rescue nil
-          retry
-        end
+        debug_info "Unrecoverable problem with message contents - #{$!}, skipping"
+        job.delete rescue nil
+        sleep 5
+        retry
       end
+
       begin
         if block_given?
           result = yield( pdu )
@@ -89,6 +84,7 @@ module BM3
         job.release rescue nil
         nil
       end
+
     end
     alias :next :pull # backwards API compatability
 
@@ -117,12 +113,19 @@ module BM3
           # Don't check this every time, but if we're over the limit
           # then do shedding until we're back under. This allows the
           # queue to bloat by 10% over "max"
+          backoff = 0.1
           loop do
             break if stats['current-jobs-ready'] <= @queue_limit
+            sleep backoff
+            if backoff >= MAX_BACKOFF
+              backoff = MAX_BACKOFF
+            else
+              backoff *= 2
+            end
           end
         end
         @beanstalk.put packed, opts[:priority], opts[:delay], opts[:ttr]
-      rescue Beanstalk::NotConnected
+      rescue Beanstalk::UnexpectedResponse
         beanstalk_connect
         set_use @out_tube
         sleep SNOOZE_TIME and retry
@@ -145,9 +148,10 @@ module BM3
     def stats
       begin
         @beanstalk.stats_tube @out_tube
-      rescue Beanstalk::NotConnected
+      rescue Beanstalk::UnexpectedResponse
         debug_info "error in stats: #{$!}"
         beanstalk_connect
+        set_watch @in_tube, reconnect: true
         sleep SNOOZE_TIME and retry
       end
     end
@@ -160,7 +164,7 @@ module BM3
         debug_info "Watching #{tube}"
         @in_tube = tube
         @beanstalk.watch tube
-      rescue Beanstalk::NotConnected
+      rescue Beanstalk::UnexpectedResponse
         beanstalk_connect
         sleep SNOOZE_TIME and retry
       rescue
@@ -174,7 +178,7 @@ module BM3
         debug_info "Using #{tube}"
         @out_tube = tube
         @beanstalk.use tube
-      rescue Beanstalk::NotConnected
+      rescue Beanstalk::UnexpectedResponse
         beanstalk_connect
         sleep SNOOZE_TIME and retry
       rescue
