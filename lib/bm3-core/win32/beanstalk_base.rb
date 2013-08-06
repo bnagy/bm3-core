@@ -99,17 +99,17 @@ module BM3
       end
 
       def background_remove fname
-        return true unless fname
+        return true unless fname && File.exists?( fname )
         # No point worrying about leaking Threads, if we can't remove the files our
         # disk will fill up.
         Thread.new {
           loop do
             begin
-              FileUtils.rm_f( fname )
+              FileUtils.rm_rf fname
             rescue
               debug_info "Failed to background remove #{fname} - #{$!}"
             end
-            break unless File.file? fname
+            break unless File.exists? fname
             debug_info "Retrying background remove..."
             sleep 1
           end
@@ -118,14 +118,14 @@ module BM3
       end
 
       def blocking_remove fname
-        return true unless fname
+        return true unless fname && File.exists?( fname )
         loop do
           begin
-            FileUtils.rm_f( fname )
+            FileUtils.rm_rf fname
           rescue
             debug_info "Failed to blocking remove #{fname} - #{$!}"
           end
-          break unless File.file? fname
+          break unless File.exists? fname
           debug_info "Retrying blocking remove..."
           sleep 1
         end
@@ -240,11 +240,11 @@ module BM3
           if File.file? CHECKPOINT_FILE
             debug_info "Found data in checkpoint directory. Recovering..."
             # Dir[] only works with Ruby style forward slashes :/
-            dump_fname=Dir["#{ENV["SystemDrive"]}/bm3_checkpoint/*.dmp"].first
-            # This is way less paranoid than I usually am - there might be some chance
-            # a remove could fail which would lead to the wrong dump being sent?
-            # However, since I _am_ paranoid about the checkpoint, I figure worst case
-            # you will have the bug and be able to repro.
+            dump_fname = Dir["#{ENV["SystemDrive"]}/bm3_checkpoint/*.dmp"].first
+            # This is way less paranoid than I usually am - there might be some
+            # chance a remove could fail which would lead to the wrong dump
+            # being sent? However, since I _am_ paranoid about the checkpoint, I
+            # figure worst case you will have the bug and be able to repro.
             dump_contents = File.binread( dump_fname ) rescue ""
             background_remove dump_fname
             checkpoint_contents = File.binread CHECKPOINT_FILE
