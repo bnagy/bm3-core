@@ -98,7 +98,7 @@ module BM3
       end
       unless checksum_ok? pdu
         # What we're worried about is someone inserting a pdu in update mode,
-        # which keeps the producer_adler32 in the tag, but changes the pdu['data']
+        # which keeps the producer_hash in the tag, but changes the pdu['data']
         # because they didn't know they shouldn't.
         raise(
           ArgumentError,
@@ -126,9 +126,11 @@ module BM3
         end
         @beanstalk.put packed, opts[:priority], opts[:delay], opts[:ttr]
       rescue Beanstalk::UnexpectedResponse
+        debug_info "UnexpectedResponse: #{$!}"
         beanstalk_connect
         set_use @out_tube
         sleep SNOOZE_TIME and retry
+        debug_info "Reconnected. Retrying."
       rescue
         debug_info $!
         debug_info "\n" << $@.join("\n")
@@ -197,7 +199,7 @@ module BM3
         extra={
           'producer_iteration' => @count+=1,
           'producer_timestamp' => "#{Time.now}",
-          'producer_adler32'   => Zlib.adler32( pdu['data'].to_s ),
+          'producer_hash'   => pdu['data'].hash,
           'producer_id'        => @id
         }
         (pdu['tag']||={}).update extra
@@ -219,8 +221,8 @@ module BM3
         if pdu['tag']['producer_crc32']
           # Backwards compatability
           "#{"%x" % Zlib.crc32( pdu['data'] ).to_s}" == pdu['tag']['producer_crc32']
-        elsif pdu['tag']['producer_adler32']
-          Zlib.adler32( pdu['data'].to_s ) == pdu['tag']['producer_adler32']
+        elsif pdu['tag']['producer_hash']
+          pdu['data'].hash == pdu['tag']['producer_hash']
         else
           true
         end
