@@ -218,7 +218,7 @@ module BM3
         return true unless pdu.has_key? 'data'
         if pdu['tag']['producer_crc32']
           # Backwards compatability
-          "#{"%x" % Zlib.crc32( pdu['data'] )}" == pdu['tag']['producer_crc32']
+          "#{"%x" % Zlib.crc32( pdu['data'] ).to_s}" == pdu['tag']['producer_crc32']
         elsif pdu['tag']['producer_adler32']
           Zlib.adler32( pdu['data'].to_s ) == pdu['tag']['producer_adler32']
         else
