@@ -190,7 +190,7 @@ module BM3
           delivery_time = Time.now - mark
           send_responses request, delivery_time, zmq_response, beanstalkd_response
         rescue
-          # something went wrong with this job but the next one might work.
+          # something went wrong with this job but the next delivery might work.
           debug_info "Error #{$!} - putting job back onto the queue"
           debug_info( "\n" << $@.first( 5 ).join("\n") )
           @put_back.push request, originate: false

@@ -197,7 +197,7 @@ module BM3
         extra={
           'producer_iteration' => @count+=1,
           'producer_timestamp' => "#{Time.now}",
-          'producer_adler32'   => Zlib.adler32( pdu['data'] ),
+          'producer_adler32'   => Zlib.adler32( pdu['data'].to_s ),
           'producer_id'        => @id
         }
         (pdu['tag']||={}).update extra
@@ -220,7 +220,7 @@ module BM3
           # Backwards compatability
           "#{"%x" % Zlib.crc32( pdu['data'] )}" == pdu['tag']['producer_crc32']
         elsif pdu['tag']['producer_adler32']
-          Zlib.adler32( pdu['data'] ) == pdu['tag']['producer_adler32']
+          Zlib.adler32( pdu['data'].to_s ) == pdu['tag']['producer_adler32']
         else
           true
         end
