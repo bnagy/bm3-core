@@ -144,7 +144,7 @@ module BM3
     end
 
     def finish
-      @finished=true
+      @finished = true
     end
 
     def stats
@@ -196,24 +196,24 @@ module BM3
         # message by using originate when they didn't actually originate the message
         # then they should make sure they forward the result to the original
         # producer, who might be waiting for it.
-        extra={
-          'producer_iteration' => @count+=1,
+        extra = {
+          'producer_iteration' => @count += 1,
           'producer_timestamp' => "#{Time.now}",
-          'producer_hash'   => pdu['data'].hash,
+          'producer_hash'      => Zlib.adler32( [*pdu['data']].join ),
           'producer_id'        => @id
         }
-        (pdu['tag']||={}).update extra
+        ( pdu['tag'] ||= {} ).update extra
       end
 
       def update pdu
         # This is for inserters that didn't originate the message (brokers,
         # delivery bots etc) but we always add the timestamp and CRC to the
         # tag's "chain of custody"
-        extra={
+        extra = {
           "#{@id}_timestamp" => "#{Time.now}",
           "#{@id}_iteration" => @count+=1
         }
-        (pdu['tag']||={}).update extra
+        ( pdu['tag'] ||= {} ).update extra
       end
 
       def checksum_ok? pdu
@@ -222,7 +222,7 @@ module BM3
           # Backwards compatability
           "#{"%x" % Zlib.crc32( pdu['data'] ).to_s}" == pdu['tag']['producer_crc32']
         elsif pdu['tag']['producer_hash']
-          pdu['data'].hash == pdu['tag']['producer_hash']
+          Zlib.adler32( [*pdu['data']].join ) == pdu['tag']['producer_hash']
         else
           true
         end
