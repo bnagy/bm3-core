@@ -2,3 +2,7 @@
 * Initial refactor of bm3-core into a gem
 = 0.0.2
 * Move the core win32 stuff in here as well
+= 0.0.3
+* Start development branch
+* Initial tag
+* Remove INotify support

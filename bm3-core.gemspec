@@ -2,7 +2,7 @@ require 'rubygems'
 
 Gem::Specification.new do |spec|
   spec.name        = 'bm3-core'
-  spec.version     = '0.0.2'
+  spec.version     = '0.0.3'
   spec.author      = 'Ben Nagy'
   spec.license     = 'MIT'
   spec.email       = 'ben@iagu.net'
@@ -18,7 +18,6 @@ Gem::Specification.new do |spec|
   spec.add_dependency('ffi')
   spec.add_dependency('msgpack-jruby')
   spec.add_dependency('hot_bunnies')
-  spec.add_dependency('rb-inotify')
   spec.add_dependency('bindata')
 
   spec.add_development_dependency('test-unit')

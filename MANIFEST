@@ -10,7 +10,6 @@
 * bin/monitor_server
 
 * lib/bm3-core/bm3_logger.rb
-* lib/bm3-core/dirwatcher.rb
 * lib/bm3-core/ttf.rb
 
 * lib/bm3-core/bug.rb
