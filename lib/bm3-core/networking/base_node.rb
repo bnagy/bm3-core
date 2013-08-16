@@ -106,22 +106,17 @@ module BM3
         )
       end
       pdu['tag'].update( 'last_hop'=>@id )
-      packed=MessagePack.pack pdu
+      packed = MessagePack.pack pdu
       #debug_info "Inserting new pdu,  size #{packed.size/1024}KB"
       begin
-        if @queue_limit && @count % (@queue_limit/10) == 0
-          # Don't check this every time, but if we're over the limit
-          # then do shedding until we're back under. This allows the
-          # queue to bloat by 10% over "max"
-          backoff = 0.1
-          loop do
-            break if stats['current-jobs-ready'] <= @queue_limit
-            sleep backoff
-            if backoff >= MAX_BACKOFF
-              backoff = MAX_BACKOFF
-            else
-              backoff *= 2
-            end
+        backoff = 0.1
+        loop do
+          break if stats['current-jobs-ready'] <= @queue_limit
+          sleep backoff
+          if backoff >= MAX_BACKOFF
+            backoff = MAX_BACKOFF
+          else
+            backoff *= 2
           end
         end
         @beanstalk.put packed, opts[:priority], opts[:delay], opts[:ttr]
@@ -190,53 +185,53 @@ module BM3
 
     private
 
-      def originate pdu
-        # This is a little non-obvious. The delivery bot sends the unicast messaging
-        # response to the 'producer_id' in the tag. If an inserter 'steals' the
-        # message by using originate when they didn't actually originate the message
-        # then they should make sure they forward the result to the original
-        # producer, who might be waiting for it.
-        extra = {
-          'producer_iteration' => @count += 1,
-          'producer_timestamp' => "#{Time.now}",
-          'producer_hash'      => Zlib.adler32( [*pdu['data']].join ),
-          'producer_id'        => @id
-        }
-        ( pdu['tag'] ||= {} ).update extra
-      end
+    def originate pdu
+      # This is a little non-obvious. The delivery bot sends the unicast messaging
+      # response to the 'producer_id' in the tag. If an inserter 'steals' the
+      # message by using originate when they didn't actually originate the message
+      # then they should make sure they forward the result to the original
+      # producer, who might be waiting for it.
+      extra = {
+        'producer_iteration' => @count += 1,
+        'producer_timestamp' => "#{Time.now}",
+        'producer_hash'      => Zlib.adler32( [*pdu['data']].join ),
+        'producer_id'        => @id
+      }
+      ( pdu['tag'] ||= {} ).update extra
+    end
 
-      def update pdu
-        # This is for inserters that didn't originate the message (brokers,
-        # delivery bots etc) but we always add the timestamp and CRC to the
-        # tag's "chain of custody"
-        extra = {
-          "#{@id}_timestamp" => "#{Time.now}",
-          "#{@id}_iteration" => @count+=1
-        }
-        ( pdu['tag'] ||= {} ).update extra
-      end
+    def update pdu
+      # This is for inserters that didn't originate the message (brokers,
+      # delivery bots etc) but we always add the timestamp and CRC to the
+      # tag's "chain of custody"
+      extra = {
+        "#{@id}_timestamp" => "#{Time.now}",
+        "#{@id}_iteration" => @count+=1
+      }
+      ( pdu['tag'] ||= {} ).update extra
+    end
 
-      def checksum_ok? pdu
-        return true unless pdu.has_key? 'data'
-        if pdu['tag']['producer_crc32']
-          # Backwards compatability
-          "#{"%x" % Zlib.crc32( pdu['data'] ).to_s}" == pdu['tag']['producer_crc32']
-        elsif pdu['tag']['producer_hash']
-          Zlib.adler32( [*pdu['data']].join ) == pdu['tag']['producer_hash']
-        else
-          true
-        end
+    def checksum_ok? pdu
+      return true unless pdu.has_key? 'data'
+      if pdu['tag']['producer_crc32']
+        # Backwards compatability
+        "#{"%x" % Zlib.crc32( pdu['data'] ).to_s}" == pdu['tag']['producer_crc32']
+      elsif pdu['tag']['producer_hash']
+        Zlib.adler32( [*pdu['data']].join ) == pdu['tag']['producer_hash']
+      else
+        true
       end
+    end
 
-      def beanstalk_connect
-        begin
-          debug_info "Connecting to Beanstalk: #{@servers}"
-          @beanstalk = Beanstalk::Pool.new @servers
-        rescue
-          debug_info "in #{__method__}: Error: #{$!}"
-          sleep SNOOZE_TIME and retry
-        end
+    def beanstalk_connect
+      begin
+        debug_info "Connecting to Beanstalk: #{@servers}"
+        @beanstalk = Beanstalk::Pool.new @servers
+      rescue
+        debug_info "in #{__method__}: Error: #{$!}"
+        sleep SNOOZE_TIME and retry
       end
+    end
 
   end
 end
