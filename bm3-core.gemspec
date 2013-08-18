@@ -2,7 +2,7 @@ require 'rubygems'
 
 Gem::Specification.new do |spec|
   spec.name        = 'bm3-core'
-  spec.version     = '0.0.3'
+  spec.version     = '0.0.4'
   spec.author      = 'Ben Nagy'
   spec.license     = 'MIT'
   spec.email       = 'ben@iagu.net'

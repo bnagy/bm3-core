@@ -6,3 +6,6 @@
 * Start development branch
 * Initial tag
 * Remove INotify support
+= 0.0.4
+* Fix bugs in the TTF parser
+* Remove the "10% queue bloat" optimisation, exponential backoff covers this
