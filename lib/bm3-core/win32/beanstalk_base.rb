@@ -6,6 +6,7 @@
 # (See http://www.opensource.org/licenses/mit-license.php for details.)
 
 require 'bm3-core'
+require 'bm3-core/win32'
 require 'zlib'
 require 'fileutils'
 
@@ -231,64 +232,65 @@ module BM3
 
       private
 
-        def clear_checkpoint
+      def clear_checkpoint
+        blocking_remove CHECKPOINT_FILE
+      end
+
+      def do_bsod_recovery
+        # see if there is an uncleared checkpoint && a dump
+        if File.file? CHECKPOINT_FILE
+          debug_info "Found data in checkpoint directory. Recovering..."
+          # Dir[] only works with Ruby style forward slashes :/
+          dump_fname = Dir["#{ENV["SystemDrive"]}/bm3_checkpoint/*.dmp"].first
+          # There might be some chance a remove could fail which would lead to
+          # the wrong dump being sent? However, we don't want to block here,
+          # because the vital thing is to send the checkpoint file. I figure
+          # worst case you will have the bug and be able to repro.
+          dump_contents = File.binread( dump_fname ) rescue ""
+          background_remove dump_fname
+          checkpoint_contents = File.binread CHECKPOINT_FILE
+          pdu = {
+            'dump'       => dump_contents,
+            'checkpoint' => checkpoint_contents,
+            'uuid'       => "#{BM3::Win32::UUID.create rescue "UUIDFAIL-#{rand(2**32)}"}"
+          }
+          @outgoing.set_use 'bsod' # FIXME: get from config?
+          @outgoing.push pdu
           blocking_remove CHECKPOINT_FILE
+        else
+          debug_info "No checkpoints, starting normally..."
         end
+      end
 
-        def do_bsod_recovery
-          # see if there is an uncleared checkpoint && a dump
-          if File.file? CHECKPOINT_FILE
-            debug_info "Found data in checkpoint directory. Recovering..."
-            # Dir[] only works with Ruby style forward slashes :/
-            dump_fname = Dir["#{ENV["SystemDrive"]}/bm3_checkpoint/*.dmp"].first
-            # This is way less paranoid than I usually am - there might be some
-            # chance a remove could fail which would lead to the wrong dump
-            # being sent? However, since I _am_ paranoid about the checkpoint, I
-            # figure worst case you will have the bug and be able to repro.
-            dump_contents = File.binread( dump_fname ) rescue ""
-            background_remove dump_fname
-            checkpoint_contents = File.binread CHECKPOINT_FILE
-            blocking_remove CHECKPOINT_FILE
-            pdu = {
-              'dump'       => dump_contents,
-              'checkpoint' => checkpoint_contents
-            }
-            @outgoing.set_use 'bsod' # FIXME: get from config?
-            @outgoing.push pdu
+      def establish_checkpoint request
+        if File.file? CHECKPOINT_FILE
+          warn "Uncleared checkpoint found. Exploding."
+          @messaging.destroy
+          exit!
+        end
+        File.binwrite CHECKPOINT_FILE, MessagePack.pack(request)
+      end
+
+      def prepare_file request
+        retries = RETRIES
+        begin
+          if self.class.sequential_testfiles?
+            filename = "datum-#{@counter+=1}.#{request['extension']}"
           else
-            debug_info "No checkpoints, starting normally..."
+            filename = "datum.#{request['extension']}"
           end
+          establish_checkpoint( request ) if self.class.bsod_checkpoints?
+          return request['url'] if request['url'] # for HTTP delivery
+          path = File.join( File.expand_path(@work_dir), filename )
+          File.binwrite path, request['data']
+          path
+        rescue
+          debug_info "Couldn't create test file #{filename} : #{$!}"
+          sleep 1 and retry unless ((retries-=1) <= 0)
+          debug_info "Can't create file. Giving up."
+          exit
         end
-
-        def establish_checkpoint request
-          if File.file? CHECKPOINT_FILE
-            warn "Uncleared checkpoint found. Exploding."
-            @messaging.destroy
-            exit!
-          end
-          File.binwrite CHECKPOINT_FILE, MessagePack.pack(request)
-        end
-
-        def prepare_file request
-          retries = RETRIES
-          begin
-            if self.class.sequential_testfiles?
-              filename = "datum-#{@counter+=1}.#{request['extension']}"
-            else
-              filename = "datum.#{request['extension']}"
-            end
-            establish_checkpoint( request ) if self.class.bsod_checkpoints?
-            return request['url'] if request['url'] # for HTTP delivery
-            path = File.join( File.expand_path(@work_dir), filename )
-            File.binwrite path, request['data']
-            path
-          rescue
-            debug_info "Couldn't create test file #{filename} : #{$!}"
-            sleep 1 and retry unless ((retries-=1) <= 0)
-            debug_info "Can't create file. Giving up."
-            exit
-          end
-        end
+      end
 
     end
   end
