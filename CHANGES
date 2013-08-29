@@ -9,3 +9,6 @@
 = 0.0.4
 * Fix bugs in the TTF parser
 * Remove the "10% queue bloat" optimisation, exponential backoff covers this
+= 0.0.5
+* Improve BSOD recovery reliability
+* Add a UUID to BSODs for easier tracking and storage

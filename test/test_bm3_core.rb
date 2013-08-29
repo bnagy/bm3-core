@@ -10,6 +10,6 @@ require 'bm3-core'
 
 class TC_BM3_Core < Test::Unit::TestCase
   test "version number is set to expected value" do
-    assert_equal('0.0.4', BM3::VERSION)
+    assert_equal('0.0.5', BM3::VERSION)
   end
 end
