@@ -111,7 +111,7 @@ module BM3
               debug_info "Failed to background remove #{fname} - #{$!}"
             end
             break unless File.exists? fname
-            debug_info "Retrying background remove..."
+            debug_info "Retrying background remove of #{fname}"
             sleep 1
           end
         }
@@ -238,7 +238,7 @@ module BM3
 
       def do_bsod_recovery
         # see if there is an uncleared checkpoint && a dump
-        if File.file? CHECKPOINT_FILE
+        if File.file? CHECKPOINT_FILE || Dir["#{ENV["SystemDrive"]}/bm3_checkpoint/*.dmp"].any?
           debug_info "Found data in checkpoint directory. Recovering..."
           # Dir[] only works with Ruby style forward slashes :/
           dump_fname = Dir["#{ENV["SystemDrive"]}/bm3_checkpoint/*.dmp"].first
@@ -246,9 +246,25 @@ module BM3
           # the wrong dump being sent? However, we don't want to block here,
           # because the vital thing is to send the checkpoint file. I figure
           # worst case you will have the bug and be able to repro.
-          dump_contents = File.binread( dump_fname ) rescue ""
-          background_remove dump_fname
-          checkpoint_contents = File.binread CHECKPOINT_FILE
+          if dump_fname
+            begin
+              debug_info "Dump filename #{dump_fname}"
+              dump_contents = File.binread dump_fname
+              background_remove dump_fname
+            rescue Errno::EACCES
+              dump_contents = "No perms to read .dmp files - try running via an Administrator command prompt."
+              debug_info dump_contents
+            end
+          else
+            debug_info "No dumpfile found"
+          end
+          if File.file? CHECKPOINT_FILE
+            debug_info "Reading checkpoint"
+            checkpoint_contents = File.binread CHECKPOINT_FILE
+          else
+            debug_info "No checkpoint file??"
+            checkpoint_contents = MessagePack.pack({})
+          end
           pdu = {
             'dump'       => dump_contents,
             'checkpoint' => checkpoint_contents,
