@@ -31,7 +31,7 @@ module BM3
 
     def initialize in_tube, out_tube, opts={}
       @debug       = opts['debug']
-      @queue_limit = opts['queue_limit']
+      @queue_limit = opts['queue_limit'] || Float::INFINITY
       @port        = opts['port'] || 11300
       servers      = opts['servers'] || ['127.0.0.1']
       @servers     = servers.map {|srv_str| "#{srv_str}:#{@port}" }
@@ -43,7 +43,7 @@ module BM3
     end
 
     def id= new_id
-      @id=new_id
+      @id = new_id
       debug_info "Set id to #{new_id}"
     end
 
@@ -89,8 +89,8 @@ module BM3
     alias :next :pull # backwards API compatability
 
     def push pdu, opts={}
-      @defaults||={originate: true, priority: 32768, ttr: 60, delay: 0}
-      opts=@defaults.update opts
+      @defaults ||= {originate: true, priority: 32768, ttr: 60, delay: 0}
+      opts = @defaults.update opts
       if opts[:originate]
         originate pdu
       else
@@ -107,7 +107,7 @@ module BM3
       end
       pdu['tag'].update( 'last_hop'=>@id )
       packed = MessagePack.pack pdu
-      #debug_info "Inserting new pdu,  size #{packed.size/1024}KB"
+      #debug_info "Inserting new pdu, size #{packed.size/1024}KB"
       begin
         backoff = 0.1
         loop do
