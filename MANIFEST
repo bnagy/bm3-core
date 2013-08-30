@@ -26,8 +26,11 @@
 * lib/bm3-core/win32/beanstalk_base.rb
 * lib/bm3-core/win32/cpu_monitor.rb
 * lib/bm3-core/win32/dialog_killer.rb
-* lib/bm3-core/win32/kernel/gdi.rb
-* lib/bm3-core/win32/kernel/gdi_font.rb
+* lib/bm3-core/win32/kernel/gdi/base.rb
+* lib/bm3-core/win32/kernel/gdi/ffi_binding.rb
+* lib/bm3-core/win32/kernel/gdi/font.rb
+* lib/bm3-core/win32/kernel/gdi/metafile.rb
+* lib/bm3-core/win32/kernel/gdi/text.rb
 * lib/bm3-core/win32/kernel/gdi_printer.rb
 * lib/bm3-core/win32/kernel/gdi_window.rb
 * lib/bm3-core/win32/process_killer.rb

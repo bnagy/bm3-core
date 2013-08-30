@@ -12,3 +12,5 @@
 = 0.0.5
 * Improve BSOD recovery reliability
 * Add a UUID to BSODs for easier tracking and storage
+= 0.0.6
+* Refactor and re-test of GDI FFI bindings

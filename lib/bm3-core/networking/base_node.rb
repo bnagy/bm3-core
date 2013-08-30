@@ -56,7 +56,7 @@ module BM3
         debug_info "Got a job!"
         pdu = MessagePack.unpack job.body
         raise BadChecksum, "Bad Checksum!" unless checksum_ok? pdu
-      rescue Beanstalk::UnexpectedResponse, IOError
+      rescue Beanstalk::UnexpectedResponse, Beanstalk::NotConnected, IOError
         debug_info "Beanstalk Error - #{$!}, reconnecting."
         beanstalk_connect
         set_watch @in_tube, reconnect: true
@@ -120,7 +120,7 @@ module BM3
           end
         end
         @beanstalk.put packed, opts[:priority], opts[:delay], opts[:ttr]
-      rescue Beanstalk::UnexpectedResponse
+      rescue Beanstalk::UnexpectedResponse, Beanstalk::NotConnected
         debug_info "UnexpectedResponse: #{$!}"
         beanstalk_connect
         set_use @out_tube
@@ -128,7 +128,7 @@ module BM3
         debug_info "Reconnected. Retrying."
       rescue
         debug_info $!
-        debug_info "\n" << $@.join("\n")
+        $@.first(5).each {|frame| debug_info frame}
         raise $!
       end
     end
@@ -145,7 +145,7 @@ module BM3
     def stats
       begin
         @beanstalk.stats_tube @out_tube
-      rescue Beanstalk::UnexpectedResponse
+      rescue Beanstalk::UnexpectedResponse, Beanstalk::NotConnected
         debug_info "error in stats: #{$!}"
         beanstalk_connect
         set_watch @in_tube, reconnect: true
@@ -161,7 +161,7 @@ module BM3
         debug_info "Watching #{tube}"
         @in_tube = tube
         @beanstalk.watch tube
-      rescue Beanstalk::UnexpectedResponse
+      rescue Beanstalk::UnexpectedResponse, Beanstalk::NotConnected
         beanstalk_connect
         sleep SNOOZE_TIME and retry
       rescue
@@ -175,7 +175,7 @@ module BM3
         debug_info "Using #{tube}"
         @out_tube = tube
         @beanstalk.use tube
-      rescue Beanstalk::UnexpectedResponse
+      rescue Beanstalk::UnexpectedResponse, Beanstalk::NotConnected
         beanstalk_connect
         sleep SNOOZE_TIME and retry
       rescue

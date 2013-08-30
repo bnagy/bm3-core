@@ -14,7 +14,7 @@ module BM3
       extend FFI::Library
       include WinTypes
 
-      ffi_lib('user32', 'gdi32', 'kernel32')
+      ffi_lib 'user32', 'gdi32', 'kernel32'
       # This is gross, but the ffi_lib method doesn't know about .drv libraries, so
       # we have to grub about modifying ivars manually
       @ffi_libs << FFI::DynamicLibrary.open(
@@ -22,16 +22,16 @@ module BM3
         FFI::DynamicLibrary::RTLD_LAZY | FFI::DynamicLibrary::RTLD_LOCAL
       )
 
-      ffi_convention(:stdcall)
+      ffi_convention :stdcall
 
-      def self.add_func(*args)
+      def self.add_func *args
         attach_function( *args )
         case args.size
         when 3
           module_function args[0]
         when 4
           module_function args[0]
-          alias_method(args[1], args[0])
+          alias_method args[1], args[0]
           module_function args[1]
         end
       end
@@ -132,8 +132,8 @@ module BM3
           :fwType, DWORD
         )
 
-        def initialize
-          super
+        def initialize *args
+          super()
           self[:cbSize] = self.size
         end
 
@@ -254,7 +254,7 @@ module BM3
           :hIconSm, HICON
         )
 
-        def initialize
+        def initialize *args
           super()
           self[:cbSize] = self.size
         end
@@ -338,7 +338,7 @@ module BM3
         )
 
         def initialize *args
-          super
+          super()
           self[:dmSize] = self.size
         end
 
@@ -348,10 +348,10 @@ module BM3
       # Things seem to work either way. I have no idea what I'm doing.
       class MessagePump
         def run
-          msg=MSG.new
-          while GDI.GetMessage(msg, 0, 0, 0)
-            GDI.TranslateMessage(msg)
-            GDI.DispatchMessage(msg)
+          msg = MSG.new
+          while GDI.GetMessage msg, 0, 0, 0
+            GDI.TranslateMessage msg
+            GDI.DispatchMessage msg
           end
         end
       end
@@ -487,25 +487,25 @@ module BM3
       end
 
       def get_facename_for_file fname
-        buf=FFI::MemoryPointer.new :char, 260 # MAX_PATH - doubt I need this much.
-        sz=FFI::MemoryPointer.new :int
-        w_fname=FFI::MemoryPointer.new :char, 260*2
+        buf     = FFI::MemoryPointer.new :char, 260 # MAX_PATH - doubt I need this much.
+        sz      = FFI::MemoryPointer.new :int
+        w_fname = FFI::MemoryPointer.new :char, 260*2
         sz.write_int 260
         # Convert the filename to MS style wide string
-        w_sz=GDI.MultiByteToWideChar( 0, MB_PRECOMPOSED, fname, fname.size, w_fname, 260)
+        w_sz = GDI.MultiByteToWideChar 0, MB_PRECOMPOSED, fname, fname.size, w_fname, 260
         raise_win32_error if w_sz.zero?
         # Undocumented GDI function. 2 asks for a LOGFONT struct, apparently more
         # reliable, according to the Internet. w_fname has had a null terminated
         # wide string written into it, so we don't need to process it further.
         3.times do
           # Very occasionally this fails, and I don't know why. Kernel stuff is trippy.
-          success=GDI.GetFontResourceInfo( w_fname, sz, buf, 2 )
+          success = GDI.GetFontResourceInfo w_fname, sz, buf, 2
           break if success
           sleep 0.5
         end
-        lf=LOGFONTW.new buf # cast the buffer to a LOGFONT struct
+        lf = LOGFONTW.new buf # cast the buffer to a LOGFONT struct
         # Convert the null terminated WCSTR back to UTF-8
-        GDI.WideCharToMultiByte( 0, WC_COMPOSITECHECK, lf[:lfFaceName].to_ptr, -1, buf, 260, nil, nil )
+        GDI.WideCharToMultiByte 0, WC_COMPOSITECHECK, lf[:lfFaceName].to_ptr, -1, buf, 260, nil, nil
         buf.read_string
       end
       module_function :get_facename_for_file, :raise_win32_error

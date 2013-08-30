@@ -6,9 +6,7 @@
 # License: The MIT License
 # (See http://www.opensource.org/licenses/mit-license.php for details.)
 
-require_relative 'gdi'
-require_relative 'gdi_font'
-require 'bm3-core/win32'
+require_relative 'gdi/base'
 
 module BM3
   module Win32
@@ -203,16 +201,15 @@ module BM3
 
     end
 
-    class GDIPrinter
+    class GDI::Printer < GDI::Base
 
-      include GDIFont
-
-      DEFAULTS={
+      DEFAULTS = {
         font_size: 36,
         debug: true
       }
 
       attr_reader :dc
+      attr_accessor :debug
 
       def initialize opts={}
         @opts         = DEFAULTS.merge opts
@@ -221,16 +218,16 @@ module BM3
           # Do this before creating the DC, in case it doesn't load.
           load_font @opts[:font_file]
         end
-        lpszDevice=make_pstr( opts[:printer] || default_printer )
-        @dc=GDI.CreateDC nil, lpszDevice, nil, nil
+        lpszDevice = make_pstr( opts[:printer] || default_printer )
+        @dc = GDI.CreateDC nil, lpszDevice, nil, nil
         raise "Unable to connect to #{lpszDevice.read_string}" if @dc.zero?
-        @printer_name=lpszDevice.read_string
+        @printer_name = lpszDevice.read_string
         debug_info "OK, connected to #{@printer_name}"
         if @opts[:font_file]
-          face=GDI.get_facename_for_file @opts[:font_file]
-          ydpi=GDI.GetDeviceCaps dc, GDI::LOGPIXELSY
+          face = GDI.get_facename_for_file @opts[:font_file]
+          ydpi = GDI.GetDeviceCaps dc, GDI::LOGPIXELSY
           # Screen res for fonts is 72dpi, so scale the font up to try and WYSIWYG.
-          set_font( face, (@opts[:font_size] * ( ydpi / 72.0 )).round )
+          set_font face, (@opts[:font_size] * ( ydpi / 72.0 )).round
         end
       end
 
@@ -243,143 +240,6 @@ module BM3
         end
       end
 
-      # ===
-      # Drawing
-      # ===
-
-      def set_alignment align
-        # TODO: add sugar. Right now you need to specify alignment options as INTs
-        res=GDI.SetTextAlign dc, align
-        raise_win32_error if res==GDI::GDI_ERROR
-        true
-      end
-
-      def draw_text str, opts={wide: true, raw: false}
-        if opts[:wide]
-          text_out_method    = :ExtTextOutW
-          text_extent_method = :GetTextExtentPoint32W
-        else
-          text_out_method    = :ExtTextOutA
-          text_extent_method = :GetTextExtentPoint32A
-        end
-        rect      = get_printable_rect
-        out       = ""
-        guess     = nil
-        sz        = GDI::SIZE.new
-        this_line = GDI::RECT.new
-        width     = rect[:right]
-        until str.empty?
-          if guess
-            out << str.slice!(0,guess)
-          else
-            # for the first line, build the string one glyph at a time until the
-            # text extent is greater than our rect width
-            until sz[:cx] > width || str.empty?
-              out << str.slice!( 0,1 )
-              if GDI.send( text_extent_method, dc, out, out.size, sz )
-                guess = out.size
-              else
-                # OK, GetTextExtentPoint failed for some reason. Try to draw the
-                # whole thing (may well be massively clipped)
-                out=str.clone
-                str.clear
-                break
-              end
-            end
-          end
-          # This next bit was designed to ensure that the line really is going to
-          # fit horizontally, but it is stripped, for now, for speed. Some lines
-          # will get clipped slightly, but it's not really a huge deal for fuzzing
-          # purposes.
-          #
-          # until sz[:cx] < width
-          if false
-            # put one back
-            before=out.size
-            str.prepend out.slice!(-1,1)
-            break if out.size==before # slice failed to shorten! jruby bug...
-            raise_win32_error unless GDI.send( text_extent_method, dc, out, out.size, sz )
-          end
-          # Write what we have so far, which may be only part of the input string.
-          # Wrap to top if we would pass the bottom of the window
-          if @current_y + sz[:cy] > rect[:bottom]
-            @current_y=0
-            end_page
-            start_page
-          end
-          this_line[:left]   = 0
-          this_line[:right]  = width
-          this_line[:top]    = @current_y
-          this_line[:bottom] = @current_y + sz[:cy]
-          GDI.send(
-            text_out_method,
-            dc, # device context
-            0, # X start
-            @current_y, # Y start
-            opts[:raw] ? GDI::ETO_GLYPH_INDEX : GDI::ETO_CLIPPED|GDI::ETO_OPAQUE,
-            this_line, # RECT
-            out, # str to draw
-            out.size, # size
-            nil # lpDx
-          )
-          @current_y+=sz[:cy]
-          out=""
-        end
-        GDI.GdiFlush
-      end
-      alias :write :draw_text
-
-      # ===
-      # Images
-      # ===
-
-      def play_emf_file emf_fname
-        draw_emf_from_handle GDI.GetEnhMetaFile emf_fname
-      end
-
-      def play_emf_data emf_data
-        p_data = make_pstr emf_data
-        draw_emf_from_handle GDI.SetEnhMetaFileBits p_data.size, p_data
-      end
-
-      def draw_emf_from_handle emf_handle
-        raise_win32_error if emf_handle.zero?
-        GDI.PlayEnhMetaFile dc, emf_handle, rect
-        GDI.DeleteEnhMetaFile emf_handle
-      end
-
-      def play_wmf_data wmf_data
-        # So. WMF do not have any position or scaling information. they're just raw
-        # GDI commands. They're usually stored on disk in a 'standard' nonstandard
-        # way with a 'placeable metafile' header that contains that info. However,
-        # the PlayMetaFile API does not allow you to pass that header, and will try
-        # and draw stuff retardedly. The options, then are:
-        # 1. Shell out to mspaint.exe
-        # - internally that calls GDI+, converts WMF to Bitmap and displays that
-        #   (which does not sound so awesome for reaching kernel stuff)
-        # 2. Convert to EMF, play the EMF
-        # - Easy, may lose some opportunities to be evil, not sure
-        # 3. Get the scaling information from the APM header and use the Coordinate
-        # Spaces and Transforms APIs to modify the target DC to correctly display
-        # the WMF by applying global transforms to all the GDI drawing commands
-        # contained in the WMF.
-        # - This involves large amounts of pels and twips and maths and crap.
-        if wmf_data[0..3]=="\xD7\xCD\xC6\x9A"
-          # This is an 'Aldus Placeable Metafile', and the first 22 bytes are the
-          # APM header, which needs to be stripped.
-          # ref: http://msdn.microsoft.com/en-us/library/windows/desktop/ms534075(v=vs.85).aspx
-          debug_info "Detected Aldus Metafile, stripping header..."
-          pdata=make_pstr wmf_data[22..-1]
-        else
-          debug_info "Doesn't look like a WMF, playing as EMF..."
-          play_emf_data( wmf_data ) and return
-        end
-        # Convert to EMF. MSDN says:
-        # If the lpmfp parameter is NULL, the system uses the MM_ANISOTROPIC mapping
-        # mode to scale the picture so that it fits the entire device surface.
-        draw_emf_from_handle GDI.SetWinMetaFileBits pdata.size, pdata, dc, nil
-      end
-
       def set_di_bits img_data, opts
         unless opts[:width] && opts[:height]
           raise ArgumentError, "No source image width / height provided!"
@@ -389,6 +249,8 @@ module BM3
         when :jpg
           bi_type = GDI::BI_JPEG
         when :png
+          # WARNING!! - As of Windows 7, PNG does not seem to be actually
+          # implemented in the kernel
           bi_type = GDI::BI_PNG
         else
           raise ArgumentError, "Unknown image type #{img_type}"
@@ -399,7 +261,7 @@ module BM3
           debug_info "#{opts[:type]} is supported by device..."
         end
         opts[:dest_height] ||= opts[:height]
-        opts[:dest_width] ||= opts[:width]
+        opts[:dest_width]  ||= opts[:width]
 
         bmi_header=GDI::BITMAPINFOHEADER.new
         bmi_header[:biSize]        = GDI::BITMAPINFOHEADER.size
@@ -448,6 +310,8 @@ module BM3
         when :jpg
           bi_type = GDI::BI_JPEG
         when :png
+          # WARNING!! - As of Windows 7, PNG does not seem to be actually
+          # implemented in the kernel
           bi_type = GDI::BI_PNG
         else
           raise ArgumentError, "Unknown image type #{img_type}"
@@ -474,7 +338,7 @@ module BM3
           " - Destination X:#{opts[:dest_width]} Y:#{opts[:dest_height]}"
         )
 
-        retval=GDI.StretchDIBits(
+        retval = GDI.StretchDIBits(
           dc,
           0, # dest X
           0, # dest Y
@@ -489,16 +353,16 @@ module BM3
           GDI::DIB_RGB_COLORS,
           GDI::SRCCOPY
         )
-        raise_win32_error if retval==GDI::GDI_ERROR || retval.zero?
+        raise_win32_error if retval == GDI::GDI_ERROR || retval.zero?
         debug_info "#{retval} scan lines copied"
         retval
       end
 
       def start_doc opts={output: "C:\\bm3\\blah.xps"}
-        docinfo=GDI::DOCINFO.new
-        docname=opts[:docname] || "PRINT"
+        docinfo               = GDI::DOCINFO.new
+        docname               = opts[:docname] || "PRINT"
         docinfo[:lpszDocName] = make_pstr docname
-        docinfo[:lpszOutput] = make_pstr opts[:output]
+        docinfo[:lpszOutput]  = make_pstr opts[:output]
         GDI.StartDoc dc, docinfo
       end
 
@@ -514,10 +378,10 @@ module BM3
         GDI.EndDoc dc
       end
 
-      def get_printable_rect
-        xres=GDI.GetDeviceCaps dc, GDI::HORZRES
-        yres=GDI.GetDeviceCaps dc, GDI::VERTRES
-        r=GDI::RECT.new
+      def rect
+        xres       = GDI.GetDeviceCaps dc, GDI::HORZRES
+        yres       = GDI.GetDeviceCaps dc, GDI::VERTRES
+        r          = GDI::RECT.new
         r[:left]   = 0
         r[:right]  = xres - 1
         r[:top]    = 0
@@ -527,9 +391,9 @@ module BM3
 
       def get_document_properties
         # http://msdn.microsoft.com/en-us/library/windows/desktop/dd183576(v=vs.85).aspx
-        hPrinter=FFI::MemoryPointer.new( WinTypes::HANDLE )
-        if GDI.OpenPrinter( make_pstr( @printer_name), hPrinter, nil )
-          devmode_sz=GDI.DocumentProperties(
+        hPrinter = FFI::MemoryPointer.new WinTypes::HANDLE
+        if GDI.OpenPrinter make_pstr( @printer_name), hPrinter, nil
+          devmode_sz = GDI.DocumentProperties(
             0,    # hWND, but seems to work anyway
             hPrinter.send( "read_array_of_" + WinTypes::HANDLE.to_sym.to_s, 1 ).first, # BARF!
             make_pstr( @printer_name ),
@@ -537,8 +401,8 @@ module BM3
             nil,  # input buffer
             0     # mode - 0 to get the full size of the DEVMODE inc special driver options
           )
-          devmode=make_pstr "\x00" * devmode_sz
-          res=GDI.DocumentProperties(
+          devmode = make_pstr "\x00" * devmode_sz
+          res = GDI.DocumentProperties(
             0,
             hPrinter.send( "read_array_of_" + WinTypes::HANDLE.to_sym.to_s, 1 ).first, # BARF!
             make_pstr( @printer_name ),
@@ -554,7 +418,7 @@ module BM3
       end
 
       def ext_escape escape_code, p_input, p_output=nil
-        sz_input = p_input.size rescue 0
+        sz_input  = p_input.size rescue 0
         sz_output = p_output.size rescue 0
         res = GDI.ExtEscape(
           dc,
@@ -570,9 +434,9 @@ module BM3
 
       def enumerate_escapes
         (0..5000).each {|escape|
-          escape_code=FFI::MemoryPointer.new :ulong
+          escape_code = FFI::MemoryPointer.new :ulong
           escape_code.write_ulong escape
-          res=GDI.ExtEscape(
+          res = GDI.ExtEscape(
             dc,
             GDI::QUERYESCSUPPORT,
             escape_code.size,
@@ -587,8 +451,8 @@ module BM3
       private
 
         def default_printer
-          buf=make_pstr( "\x00" * 260 )
-          buf_sz=FFI::MemoryPointer.new( :ulong )
+          buf    = make_pstr( "\x00" * 260 )
+          buf_sz = FFI::MemoryPointer.new( :ulong )
           buf_sz.write_ulong buf.size
           if GDI.GetDefaultPrinter buf, buf_sz
             buf.read_string
@@ -598,7 +462,7 @@ module BM3
         end
 
         def check_support img_type, p_img_data
-          escape_code=FFI::MemoryPointer.new :ulong
+          escape_code = FFI::MemoryPointer.new :ulong
           case img_type
           when :jpg
             img_escape = GDI::CHECKJPEGFORMAT
@@ -608,7 +472,7 @@ module BM3
           end
           escape_code.write_ulong img_escape
           # Check if CHECKXXXFORMAT exists
-          res=GDI.ExtEscape(
+          res = GDI.ExtEscape(
             dc,
             GDI::QUERYESCSUPPORT,
             escape_code.size,
@@ -617,8 +481,8 @@ module BM3
             nil
           )
           if res > 0
-            status=FFI::MemoryPointer.new :ulong
-            res=GDI.ExtEscape(
+            status = FFI::MemoryPointer.new :ulong
+            res = GDI.ExtEscape(
               dc,
               img_escape,
               p_img_data.size,
@@ -626,27 +490,11 @@ module BM3
               status.size,
               status
             )
-            return true if status.read_ulong==1 && res > 0
+            return true if status.read_ulong == 1 && res > 0
           end
           false
         end
 
-        def poi(a); ::FFI::Pointer.new(a); end
-
-        def make_pstr str
-          return nil unless str
-          FFI::MemoryPointer.from_string str
-        end
-
-        def raise_win32_error
-          error=WinError.get_last_error
-          debug_info "#{error} from #{caller[1]}"
-          raise "[#{Time.now} #{self.class} WIN32 ERR]  #{WinError.get_last_error}"
-        end
-
-        def debug_info str
-          warn "[#{Time.now} #{self.class} DEBUG] #{str}" if @opts[:debug]
-        end
     end
   end
 end
