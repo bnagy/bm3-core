@@ -7,6 +7,6 @@ require_relative 'bm3-core/bm3_logger'
 require_relative 'bm3-core/networking'
 
 module BM3
-	VERSION = '0.0.6'
+	VERSION = '0.0.7'
 end
 

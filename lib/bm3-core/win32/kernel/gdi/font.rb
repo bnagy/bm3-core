@@ -1,7 +1,6 @@
 # Abstracted out font stuff for anything that supports #dc, so it can be mixed
 # in.
 #
-#
 # Author: Ben Nagy
 # Copyright: Copyright (c) Ben Nagy, 2006-2013.
 # License: The MIT License

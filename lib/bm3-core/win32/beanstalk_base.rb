@@ -71,7 +71,11 @@ module BM3
           ["heartbeat", {'id'=>@messaging.id, 'agent'=>"#{@agent_name}", 'mac_addr'=>@mac_addr}]
         }
         # Check if we're recovering from a BSOD
-        do_bsod_recovery if self.class.bsod_checkpoints?
+        if self.class.bsod_checkpoints?
+          do_bsod_recovery
+          # make sure the checkpoint directory exists
+          FileUtils.mkdir_p(File.dirname CHECKPOINT_FILE)
+        end
       end
 
       def perform_delivery fname, request
@@ -88,9 +92,17 @@ module BM3
         #
         # NB: this is designed to allow you to not send a beanstalkd response in
         # some cases, EVEN THOUGH the PDU lists a tube. For processes where you
-        # NEVER want one, set the 'output_tube' key to an empty string or nil at the
-        # producer end, or just don't include that key.
+        # NEVER want one, set the 'output_tube' key to an empty string or nil in
+        # your producer config file, or just don't include that key.
         raise NotImplementedError, "No delivery method defined!"
+      end
+
+      def add_crashtag tag, pdu, details
+        tag.update(
+          'fuzzbot_crash_md5'          => "#{Digest::MD5.hexdigest( [*pdu['data']].join )}",
+          'fuzzbot_exception_info_md5' => "#{Digest::MD5.hexdigest( details )}",
+          'fuzzbot_crash_uuid'         => "#{BM3::Win32::UUID.create rescue "UUIDFAIL-#{rand(2**32)}"}",
+        )
       end
 
       def agent_cleanup
@@ -237,7 +249,12 @@ module BM3
       end
 
       def do_bsod_recovery
-        # see if there is an uncleared checkpoint && a dump
+        # see if there is an uncleared checkpoint or a dump Presently this fails
+        # 'open' in that a BSOD is not the only way to get an uncleared
+        # checkpoint ( all kinds of reboot races will do it ), so just because
+        # you get checkpoints in your bsod triage doesn't mean they're real.
+        # Seems better to do it that way than rely on a .dmp file ALWAYS being
+        # created
         if File.file? CHECKPOINT_FILE || Dir["#{ENV["SystemDrive"]}/bm3_checkpoint/*.dmp"].any?
           debug_info "Found data in checkpoint directory. Recovering..."
           # Dir[] only works with Ruby style forward slashes :/
