@@ -16,3 +16,5 @@
 * Refactor and re-test of GDI FFI bindings
 = 0.0.7
 * Improve some error handling, bugfixes
+= 0.0.8
+* Important bugfixes

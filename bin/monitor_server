@@ -57,6 +57,7 @@ class Monitor
     debug_info "Starting to monitor pid #{app_pid}"
     raise "#{self}: Debugee PID mismatch" unless @debugger.current_process==app_pid
     @monitor_args=MONITOR_DEFAULTS.merge( arg_hsh )
+    @dialog_killer.reset
     @state=:running
 
     start_monitor_thread( app_pid )
@@ -149,7 +150,7 @@ class Monitor
           Dir.glob(pattern, File::FNM_DOTMATCH).each {|fn|
             next if File.directory?(fn)
             begin
-              FileUtils.rm(fn)
+              FileUtils.rm_f(fn)
             rescue
               next # probably still open
             end

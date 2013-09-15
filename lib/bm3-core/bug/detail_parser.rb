@@ -14,7 +14,7 @@ module BM3
     # In: the !exploitable output as a string
     # Out: [[0, "wwlib!wdCommandDispatch+0x14509b"], [1, ... etc
     def self.stack_trace detail_string
-      frames = detail_string.scan( /STACK_FRAME:(.*)$/ ).flatten
+      frames = detail_string.scan( /^STACK_FRAME:(.*)$/ ).flatten
       (0..frames.length-1).to_a.zip frames
     end
 
@@ -177,18 +177,19 @@ module BM3
   class Detail < BasicObject
 
     attr_reader :registers
+    include ::BM3
 
     def initialize detail_string
       @detail_string = detail_string
-      @registers     = ::RegisterSet[*(::DetailParser.registers(@detail_string).flatten)]
+      @registers     = RegisterSet[*(DetailParser.registers(@detail_string).flatten)]
     end
 
     def disassembly
-      @disassembly ||= ::DetailParser.disassembly( @detail_string ).map {|a| a[1]} rescue nil
+      @disassembly ||= DetailParser.disassembly( @detail_string ).map {|a| a[1]} rescue nil
     end
 
     def stack_trace
-      @stack_trace ||= ::DetailParser.stack_trace( @detail_string ).map {|a| a[1]} rescue nil
+      @stack_trace ||= DetailParser.stack_trace( @detail_string ).map {|a| a[1]} rescue nil
     end
 
     def affected_registers
@@ -197,6 +198,7 @@ module BM3
       else
         # This is unsound. Supposed to deal with x86 / x64 registers, but I think
         # it's broken...
+        return nil if !disassembly || disassembly.empty?
         affected_registers = disassembly[1].scan(/[er][abcd]x|[er][sd]i|[er][sb]p|r\d+/)
         @affected          = @registers.select {|reg,val| affected_registers.include? reg}
       end
@@ -207,7 +209,7 @@ module BM3
     end
 
     def method_missing meth, *args
-      ::DetailParser.send meth, @detail_string
+      DetailParser.send meth, @detail_string
     end
   end
 end

@@ -38,6 +38,10 @@ module BM3
         @dialogs_killed
       end
 
+      def reset
+        @dialogs_killed = false
+      end
+
       def kill_dialogs target_pid
         @kill_popups ||= Proc.new {|handle, param|
           # This won't get ALL the windows, eg with Word it sometimes

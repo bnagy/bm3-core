@@ -32,7 +32,7 @@ module BM3
         buf = FFI::MemoryPointer.from_string( ' ' * 16 )
         retval = UuidCreateSequential buf
         raise "#{self}:#{__method__}: #{WinError.get_last_error}" unless retval.zero?
-        ("%.2x%.2x-%.2x-%.2x-%.2x-%.2x%.2x%.2x" %  buf.read_array_of_uchar( 16 )).upcase
+        ("%.2x%.2x%.2x%.2x-%.2x%.2x-%.2x%.2x-%.2x%.2x-%.2x%.2x%.2x%.2x%.2x%.2x" %  buf.read_array_of_uchar( 16 )).upcase
       end
 
     end
