@@ -77,6 +77,9 @@ module BM3
       unless File.directory?( full_dir=File.expand_path(output_dir) )
         raise ArgumentError, "#{COMPONENT}-#{VERSION}: Bad output directory #{output_dir}"
       end
+      if Dir["#{full_dir}/#{@id}.*"].any?
+        raise "in #{self.class}##{__method__}: Bug with id #{@id} already exists!"
+      end
       File.binwrite File.join(full_dir,"#{@id}.tag"), YAML.dump(@pdu['tag'])
       File.binwrite File.join(full_dir,"#{@id}.txt"), @pdu['exception_info']
       File.binwrite(

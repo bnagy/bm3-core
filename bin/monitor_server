@@ -1,3 +1,5 @@
+#!/usr/bin/env ruby
+
 # Process to monitor a target under instrumentation. This process handles
 # monitoring the target CPU, running the debugger (which it connects to over
 # DRb) and killing off dialog boxes.
@@ -39,28 +41,27 @@ class Monitor
   attr_accessor :debug
 
   def initialize
+    @debug = OPTS[:debug]
     debug_info "Starting sweeper thread"
     start_sweeper_thread
     debug_info "Connecting to debugger..."
     begin
-      @debugger=DRbObject.new(nil, "druby://127.0.0.1:8889")
+      @debugger = DRbObject.new nil, "druby://127.0.0.1:8889"
     rescue
       raise "#{self}: Couldn't connect to debugger"
     end
-    @state=:idle
-    @debug=OPTS[:debug]
-    @dialog_killer=DialogKiller.new MONITOR_GRANULARITY*4, OPTS[:debug]
+    @state = :idle
+    @dialog_killer = DialogKiller.new MONITOR_GRANULARITY*4, OPTS[:debug]
     debug_info "Ready to roll."
   end
 
-  def start( app_pid, arg_hsh={} )
+  def start app_pid, arg_hsh={}
     debug_info "Starting to monitor pid #{app_pid}"
     raise "#{self}: Debugee PID mismatch" unless @debugger.current_process==app_pid
-    @monitor_args=MONITOR_DEFAULTS.merge( arg_hsh )
+    @monitor_args = MONITOR_DEFAULTS.merge arg_hsh
     @dialog_killer.reset
-    @state=:running
-
-    start_monitor_thread( app_pid )
+    @state = :running
+    start_monitor_thread app_pid
   end
 
   def running?
@@ -148,9 +149,9 @@ class Monitor
       loop do
         @patterns.each {|pattern|
           Dir.glob(pattern, File::FNM_DOTMATCH).each {|fn|
-            next if File.directory?(fn)
+            next if File.directory? fn
             begin
-              FileUtils.rm_f(fn)
+              FileUtils.rm_f fn
             rescue
               next # probably still open
             end
@@ -208,10 +209,11 @@ class Monitor
           end
         rescue
           if "#{$!}" =~ /E_UNEXPECTED/
-            # target exited prematurely? This happens for /GS violations etc...
+            # target exited prematurely, but the debugger is still 'there'
             debug_info "UNEXPECTED event."
             handle_fatal_event
           else
+            # No idea what's happening.
             @state = :error
             debug_info "#{__method__} #{$!} Setting state to error"
             $@.first( 5 ).each {|frame| debug_info frame }
@@ -273,7 +275,8 @@ class Monitor
     # Only called from within the monitor thread, so the Thread.exit
     # exits @monitor_thread not the whole app
     get_minidump if @monitor_args['minidump']
-    @event_data, @custom_state=@instrumentation_module.on_fatal( @debugger )
+    @instrumentation_module ||= eval(@monitor_args['instrumentation_module'])
+    @event_data, @custom_state = @instrumentation_module.on_fatal( @debugger )
     # Don't override custom states from the instrumentation module
     @state = @custom_state || :exception
     @fatal_event = true

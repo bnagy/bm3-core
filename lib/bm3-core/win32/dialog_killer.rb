@@ -43,11 +43,11 @@ module BM3
       end
 
       def kill_dialogs target_pid
+        pid = FFI::MemoryPointer.new :ulong
         @kill_popups ||= Proc.new {|handle, param|
           # This won't get ALL the windows, eg with Word it sometimes
           # pops up a toplevel dialog box that is not a popup of the
           # parent pid.
-          pid = FFI::MemoryPointer.new :ulong
           GetWindowThreadProcessId handle, pid
           if pid.read_ulong == param
             # Window belongs to this pid
