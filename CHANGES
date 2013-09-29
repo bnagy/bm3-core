@@ -18,3 +18,5 @@
 * Improve some error handling, bugfixes
 = 0.0.8
 * Important bugfixes
+= 0.0.9
+* Debugging and native memory performance changes
