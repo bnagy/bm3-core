@@ -65,8 +65,8 @@ module BM3
         @outgoing.id = @messaging.id
         @counter=0
         # This is a bit crap, should probably do natively.
-        raw       = IO.popen 'ipconfig /all'
-        @mac_addr = raw.read.match(/Physical.*: (.*)$/)[1].downcase.split('-').join(':')
+        raw       = `ipconfig /all`
+        @mac_addr = raw[/Physical.*: (.*)$/,1].downcase.split('-').join(':')
         @messaging.heartbeat( HEARTBEAT_SECS ) {
           ["heartbeat", {'id'=>@messaging.id, 'agent'=>"#{@agent_name}", 'mac_addr'=>@mac_addr}]
         }
