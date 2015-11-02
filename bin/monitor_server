@@ -26,11 +26,11 @@ class Monitor
   MONITOR_DEFAULTS = {
     'timeout'      => 15,          # Hard timeout before kill
     'kill_dialogs' => true,
-    'kill_on_idle' => true
+    'kill_on_idle' => true,
+    'cpumon_start' => 15.0,
+    'cpumon_kill'  => 1.0,
+    'cpumon_ticks' => 15,
   }
-  CPUMON_THRESH       = 0.00   # % CPU to get under to be called 'idle'
-  CPUMON_TICKS        = 15     # How many measures at CPUMON_THRESH before kill
-  WORKING_MIN         = 15     # CPU % to get over to be called 'working'
   MONITOR_GRANULARITY = 0.05   # Granularity for wait_for_event and the dialog killer (in s)
   RETRY_COUNT         = 5      # Used by most stuff that retries
   SLEEPTIME           = 3      # For the stale file sweeper
@@ -179,12 +179,12 @@ class Monitor
           # wait_for_event blocks for roughly the monitor granularity, so each
           # time it returns is a 'tick', at which point we update the CPU
           # monitor average and kill dialogs
+          @cpumon.update_rolling_avg
           is_event = @debugger.wait_for_event MONITOR_GRANULARITY*1000 # in msec
           @dialog_killer.kill_dialogs( pid ) if @monitor_args['kill_dialogs']
-          @cpumon.update_rolling_avg
           unless is_event
             abort_if_hard_timeout
-            if @cpumon.any_above? WORKING_MIN
+            if @cpumon.any_above? @monitor_args['cpumon_start']
               debug_info "Process has started working, legit to kill" unless already
               already = true
               abort_if_idle if @monitor_args['kill_on_idle']
@@ -232,11 +232,11 @@ class Monitor
     # Only called from within the monitor thread, so the Thread.exit
     # exits @monitor_thread not the whole app
     #
-    # CPUMON_TICKS is also the minimum number of events for rolling_avg -
+    # @monitor_args['cpumon_ticks'] is also the minimum number of events for rolling_avg -
     # it returns nil otherwise
     return unless @delivery_start_time
-    if (avg=@cpumon.rolling_avg( CPUMON_TICKS )) && avg <= CPUMON_THRESH
-      debug_info "CPU monitor says 'no'. (average #{avg} at #{CPUMON_TICKS} measures)"
+    if (avg=@cpumon.rolling_avg( @monitor_args['cpumon_ticks'] )) && avg <= @monitor_args['cpumon_kill']
+      debug_info "CPU monitor says 'no'. (average #{avg} at #{@monitor_args['cpumon_ticks']} measures)"
       if @instrumentation_module && @instrumentation_module.respond_to?( :on_abort )
         @event_data, @custom_state = @instrumentation_module.on_abort @debugger
       end
@@ -257,7 +257,7 @@ class Monitor
     # exits @monitor_thread not the whole app
     return unless @delivery_start_time # test delivery hasn't started yet
     if Time.now - @delivery_start_time > @monitor_args['timeout']
-      debug_info "CPU: #{@cpumon.rolling_avg( CPUMON_TICKS )}"
+      debug_info "CPU: #{@cpumon.rolling_avg( @monitor_args['cpumon_ticks'] )}"
       debug_info "Hard Timeout (#{Time.now - @delivery_start_time}) Exceeded."
       if @instrumentation_module && @instrumentation_module.respond_to?( :on_abort )
         @event_data, @custom_state = @instrumentation_module.on_abort @debugger

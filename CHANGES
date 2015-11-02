@@ -20,3 +20,11 @@
 * Important bugfixes
 = 0.0.9
 * Debugging and native memory performance changes
+= 0.1.0
+* switch to msgpack from msgpack-jruby
+= 0.1.1
+* make CPU monitoring in monitor_server configurable via the PDUs
+* add beanstalk-client and trollop dependencies
+= 0.1.2
+* switch to march_hare from hot_bunnies (newer, same authors, seems more
+  maintained)

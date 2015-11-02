@@ -13,7 +13,7 @@
 require 'msgpack'
 require 'bm3-core/bm3_logger'
 require 'bm3-core/win32/uuid' if RbConfig::CONFIG['host_os'] =~ /mswin|mingw/
-require_relative 'hot_bunnies_messaging'
+require_relative 'march_hare_messaging'
 
 module BM3
   class Messaging
@@ -29,7 +29,7 @@ module BM3
     #
     # This class does no error handling. You should handle reconnect logic and
     # such in the MessageLayer mixin.
-    include MessageLayer::HotBunnies
+    include MessageLayer::MarchHare
 
     include BM3::Logger
 

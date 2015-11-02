@@ -19,6 +19,7 @@
 * lib/bm3-core/networking/base_node.rb
 * lib/bm3-core/networking/bm3map.rb
 * lib/bm3-core/networking/hot_bunnies_messaging.rb
+* lib/bm3-core/networking/march_hare_messaging.rb
 * lib/bm3-core/networking/messaging.rb
 * lib/bm3-core/networking/nodes.rb
 
